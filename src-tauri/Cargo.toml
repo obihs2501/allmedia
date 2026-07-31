@@ -1,0 +1,25 @@
+[package]
+name = "allmedia"
+version = "0.0.0"
+description = "All-in-one media downloader: X/Twitter, 92 Chinese sites, and social-media author crawling"
+authors = ["obihs2501"]
+license = "GPL-3.0-only"
+repository = "https://github.com/obihs2501/allmedia"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[build-dependencies]
+tauri-build = { version = "1.5", features = [] }
+
+[dependencies]
+tauri = { version = "1.5", features = [ "shell-all", "fs-all", "path-all", "os-all", "clipboard-all", "app-all", "dialog-all", "window-all", "notification-all"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+reqwest = { version = "0.11", features = ["json", "gzip", "rustls-tls"] }
+sysproxy = "0.3"
+
+[features]
+# this feature is used for production builds or when `devPath` points to the filesystem
+# DO NOT REMOVE!!
+custom-protocol = ["tauri/custom-protocol"]

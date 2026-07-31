@@ -1,0 +1,73 @@
+{
+  "__default": {
+    "code": 0,
+    "data": {},
+    "courseList": [],
+    "courseChapterList": [],
+    "files": []
+  },
+  "GET /content/v1.2/series/all_lesson_list": {
+    "status": "0",
+    "code": "0",
+    "data": {
+      "seriesName": "Mddclass Mock Series",
+      "groupId": "GROUP1",
+      "items": [
+        {
+          "id": "VID1",
+          "contentTitle": "Mddclass Mock Lesson",
+          "showIndex": 0,
+          "contentType": "video",
+          "videoInfo": {
+            "videoId": "VID1",
+            "videoName": "Mddclass Mock Lesson",
+            "videoUrl": "https://media.example.com/mddclass/lesson.mp4",
+            "totalSize": 1234
+          }
+        },
+        {
+          "id": "VID2",
+          "contentId": "VID2",
+          "contentTitle": "Mddclass OCS Lesson",
+          "showIndex": 1,
+          "contentType": "video",
+          "materialList": [
+            {
+              "fileName": "Mddclass Handout",
+              "fileUrl": "https://cdn.example.com/mddclass/handout.pdf",
+              "fileSize": 2048
+            }
+          ],
+          "coursewareInfo": {
+            "coursewareId": "CW1",
+            "tenantId": "10002",
+            "userSign": "SIGN1"
+          },
+          "videoInfo": {
+            "videoId": "VID2",
+            "videoName": "Mddclass OCS Lesson",
+            "coursewareInfo": {
+              "coursewareId": "CW1",
+              "tenantId": "10002",
+              "userSign": "SIGN1"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "GET /v5.6/courseware_contents/CW1": {
+    "code": 0,
+    "data": {
+      "cdnHosts": [
+        "https://cdn.example.com/ocs"
+      ],
+      "m3u8s": [
+        {
+          "quality": "source",
+          "content": "#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXTINF:4,\nseg.ts\n#EXT-X-ENDLIST"
+        }
+      ]
+    }
+  }
+}

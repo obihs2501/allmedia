@@ -1,0 +1,13 @@
+{
+  "data": [
+    {
+      "chapterName": "Chapter 1",
+      "courseLessonList": [
+        {
+          "lessonName": "Lesson 1",
+          "id": "1"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,637 @@
+// Package lexueyun implements an extractor for lexue-cloud.com (乐学云) courses.
+//
+// Endpoints from decompiled Mooc/Courses/Lexueyun/:
+//
+//	https://my.lexue-cloud.com
+//	/happyStudy/user/userInfo
+//	/happyStudy/proxy/lexuesv/pc/getLessonsBySubject
+//	/happyStudy/live/getPlayUrl
+//	/happyStudy/livePro/getPlayUrl
+//	https://video.sunlands.com/video/thirdLogin
+package lexueyun
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"path"
+	"path/filepath"
+	"sort"
+	"strings"
+
+	"github.com/Sophomoresty/mediago/internal/extractor"
+	"github.com/Sophomoresty/mediago/internal/util"
+)
+
+const (
+	urlOrigin          = "https://my.lexue-cloud.com"
+	urlReferer         = urlOrigin + "/home"
+	channelCode        = "lexueyun-pc"
+	userInfoPath       = "/happyStudy/user/userInfo"
+	merchantListPath   = "/happyStudy/proxy/lexuesv/app/myMerchantList/v2"
+	orderListPath      = "/happyStudy/proxy/lexuesv/app/getOrdersByMerchant/v2"
+	subjectDetailPath  = "/happyStudy/proxy/lexuesv/pc/getSubjectDetail"
+	lessonListPath     = "/happyStudy/proxy/lexuesv/pc/getLessonsBySubject"
+	datumPath          = "/happyStudy/proxy/lexuesv/pc/getDatum"
+	orderInfoPath      = "/happyStudy/proxy/lexuesv/pc/getOrderInfo"
+	lessonProgressPath = "/happyStudy/proxy/lexuesv/app/getLessonLearnProgress"
+	livePlayPath       = "/happyStudy/live/getPlayUrl"
+	liveProPlayPath    = "/happyStudy/livePro/getPlayUrl"
+	sunlandsVideoEntry = "https://video.sunlands.com/video"
+	defaultHiddenPrice = 999
+)
+
+var patterns = []string{`(?:[\w-]+\.)?lexue-cloud\.com/|(?:lexueyun|lexue-cloud|乐学云课堂|乐学云)`}
+
+func init() {
+	extractor.Register(&Lexueyun{}, extractor.SiteInfo{Name: "Lexueyun", URL: "lexue-cloud.com", NeedAuth: true})
+}
+
+type Lexueyun struct{}
+
+func (l *Lexueyun) Patterns() []string { return patterns }
+
+type lexueSession struct {
+	auth, stuID string
+	user        map[string]any
+}
+type courseSel struct {
+	subjectID, ordSerialNo, orderID, title string
+	packageID, merchantID                  string
+	price                                  float64
+	purchased                              bool
+	raw                                    map[string]any
+}
+
+type userInfoResp struct {
+	Flag any `json:"flag"`
+	Data struct {
+		ID            any    `json:"id"`
+		StuID         any    `json:"stuId"`
+		StuID2        any    `json:"stu_id"`
+		MerchantID    any    `json:"merchantId"`
+		MerchantID2   any    `json:"merchant_id"`
+		MerchantName  string `json:"merchantName"`
+		MerchantName2 string `json:"merchant_name"`
+	} `json:"data"`
+}
+
+type subjectDetailResp struct {
+	Data struct {
+		PackageID  any `json:"packageId"`
+		MerchantID any `json:"merchantId"`
+	} `json:"data"`
+}
+type lessonsResp struct {
+	Data struct {
+		ResourceList []resource `json:"resourceList"`
+	} `json:"data"`
+}
+type resource struct {
+	ResourceName string   `json:"resourceName"`
+	ResourceID   any      `json:"resourceId"`
+	ResourceType any      `json:"resourceType"`
+	LessonList   []lesson `json:"lessonList"`
+}
+type lesson struct {
+	LessonName         string           `json:"lessonName"`
+	Name               string           `json:"name"`
+	Title              string           `json:"title"`
+	LessonID           any              `json:"lessonId"`
+	LivePlaybackID     any              `json:"livePlaybackId"`
+	LiveLessonID       any              `json:"liveLessonId"`
+	TeachUnitID        any              `json:"teachUnitId"`
+	ResourceType       any              `json:"resourceType"`
+	ResourceID         any              `json:"resourceId"`
+	ResourceName       string           `json:"resourceName"`
+	LiveSource         any              `json:"liveSource"`
+	LiveReplaySource   any              `json:"liveReplaySource"`
+	LiveStatus         any              `json:"liveStatus"`
+	IsNewLive          any              `json:"isNewLive"`
+	ActualLiveDuration any              `json:"actualLiveDuration"`
+	Duration           any              `json:"duration"`
+	CourseDataList     []map[string]any `json:"courseDataList"`
+}
+
+type playResp struct {
+	Data struct {
+		PlayURL string `json:"playUrl"`
+	} `json:"data"`
+}
+type sunlandsResp struct {
+	Token         string          `json:"token"`
+	VideoPlayURLs []sunlandsVideo `json:"videoPlayUrls"`
+	RoomInfo      map[string]any  `json:"roomInfo"`
+}
+type sunlandsVideo struct {
+	SHttpsURL string `json:"sHttpsUrl"`
+	SURL      string `json:"sUrl"`
+	LFileSize any    `json:"lFileSize"`
+	LSequence any    `json:"lSequence"`
+}
+
+func (l *Lexueyun) Extract(rawURL string, opts *extractor.ExtractOpts) (*extractor.MediaInfo, error) {
+	if opts == nil || opts.Cookies == nil {
+		return nil, fmt.Errorf("lexueyun requires login cookies")
+	}
+	c := util.NewClient()
+	c.SetCookieJar(opts.Cookies)
+	sess, err := loginSession(c, opts.Cookies)
+	if err != nil {
+		return nil, err
+	}
+	sel := parseCourse(rawURL)
+	if sel.subjectID == "" {
+		sel, err = firstCourse(c, sess)
+		if err != nil {
+			return nil, err
+		}
+	} else if listed, ok := findCourse(c, sess, sel); ok {
+		sel = mergeCourseSel(sel, listed)
+	}
+	if sel.title == "" {
+		sel.title = "lexueyun_" + sel.subjectID
+	}
+	if !sel.purchased {
+		sel.purchased = true
+	}
+	if err := fillSubjectDetail(c, sess, &sel); err != nil {
+		return nil, err
+	}
+	if sel.price == 0 {
+		sel.price = defaultHiddenPrice
+	}
+	lessons, err := getLessons(c, sess, sel)
+	if err != nil {
+		return nil, err
+	}
+	entries := make([]*extractor.MediaInfo, 0)
+	fileSeen := map[string]bool{}
+	for ri, res := range lessons {
+		for li, les := range res.LessonList {
+			entry, err := resolveLesson(c, sess, sel, res, les, ri+1, li+1)
+			if err == nil && entry != nil {
+				entries = append(entries, entry)
+			}
+			// courseDataList: inline file attachments on each lesson
+			for fi, item := range les.CourseDataList {
+				fe := makeLexueFileEntry(item, ri+1, li+1, fi+1, fileSeen)
+				if fe != nil {
+					entries = append(entries, fe)
+				}
+			}
+		}
+	}
+	// getDatum: standalone courseware/datum files for the subject
+	datumItems := getDatum(c, sess, sel)
+	for di, item := range datumItems {
+		fe := makeLexueFileEntry(item, len(lessons)+1, 0, di+1, fileSeen)
+		if fe != nil {
+			entries = append(entries, fe)
+		}
+	}
+	if len(entries) == 0 {
+		return nil, fmt.Errorf("lexueyun: no playable lesson video or downloadable file resolved")
+	}
+	return &extractor.MediaInfo{
+		Site:    "lexueyun",
+		Title:   sel.title,
+		Entries: entries,
+		Extra: map[string]any{
+			"subject_id":   sel.subjectID,
+			"ordSerialNo":  sel.ordSerialNo,
+			"order_id":     sel.orderID,
+			"package_id":   sel.packageID,
+			"merchant_id":  sel.merchantID,
+			"price":        sel.price,
+			"purchased":    sel.purchased,
+			"student_id":   sess.stuID,
+			"channel_code": channelCode,
+		},
+	}, nil
+}
+
+func loginSession(c *util.Client, jar http.CookieJar) (lexueSession, error) {
+	auth := userAuthFromJar(jar)
+	if auth == "" {
+		return lexueSession{}, fmt.Errorf("lexueyun requires lexueyun-pc-userAuth")
+	}
+	body, err := requestLexue(c, auth, userInfoPath, map[string]any{})
+	if err != nil {
+		return lexueSession{}, err
+	}
+	var resp userInfoResp
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return lexueSession{}, fmt.Errorf("lexueyun userInfo parse: %w", err)
+	}
+	stuID := firstNonEmpty(anyString(resp.Data.ID), anyString(resp.Data.StuID), anyString(resp.Data.StuID2))
+	if fmt.Sprint(resp.Flag) != "1" || stuID == "" {
+		return lexueSession{}, fmt.Errorf("lexueyun userInfo did not return logged-in stuId")
+	}
+	user := map[string]any{"merchantId": resp.Data.MerchantID, "merchant_id": resp.Data.MerchantID2, "merchantName": resp.Data.MerchantName, "merchant_name": resp.Data.MerchantName2}
+	return lexueSession{auth: auth, stuID: stuID, user: user}, nil
+}
+
+func firstCourse(c *util.Client, sess lexueSession) (courseSel, error) {
+	courses := listCourses(c, sess)
+	if len(courses) > 0 {
+		return courses[0], nil
+	}
+	return courseSel{}, fmt.Errorf("lexueyun course list is empty")
+}
+
+func findCourse(c *util.Client, sess lexueSession, wanted courseSel) (courseSel, bool) {
+	courses := listCourses(c, sess)
+	for _, course := range courses {
+		if wanted.subjectID != "" && course.subjectID != wanted.subjectID {
+			continue
+		}
+		if wanted.ordSerialNo != "" && course.ordSerialNo != wanted.ordSerialNo {
+			continue
+		}
+		if wanted.orderID != "" && course.orderID != wanted.orderID {
+			continue
+		}
+		return course, true
+	}
+	return courseSel{}, false
+}
+
+func listCourses(c *util.Client, sess lexueSession) []courseSel {
+	merchants := extractList(requestMap(c, sess, merchantListPath, map[string]any{"stuId": sess.stuID}), []string{"merchantList", "myMerchantList", "list", "records", "items", "rows"})
+	if len(merchants) == 0 && firstNonEmpty(anyString(sess.user["merchantId"]), anyString(sess.user["merchant_id"])) != "" {
+		merchants = []map[string]any{sess.user}
+	}
+	var out []courseSel
+	seen := map[string]bool{}
+	for _, m := range merchants {
+		mid := firstNonEmpty(anyString(m["merchantId"]), anyString(m["merchant_id"]), anyString(m["id"]))
+		merchantName := firstNonEmpty(anyString(m["merchantName"]), anyString(m["merchant_name"]), anyString(m["name"]))
+		orders := extractList(requestMap(c, sess, orderListPath, map[string]any{"merchantId": mid, "stuId": sess.stuID}), []string{"orderList", "orders", "courseList", "list", "records", "items", "rows"})
+		for _, o := range orders {
+			ord := firstNonEmpty(anyString(o["ordSerialNo"]), anyString(o["orderSerialNo"]), anyString(o["ordNo"]))
+			orderID := firstNonEmpty(anyString(o["orderId"]), anyString(o["order_id"]))
+			product := firstNonEmpty(anyString(o["productName"]), anyString(o["goodsName"]), anyString(o["title"]))
+			for _, sub := range extractList(o, []string{"subjectList", "subjects", "courseList", "courses", "courseInfoList", "subjectInfoList", "classList"}) {
+				sid := firstNonEmpty(anyString(sub["subjectId"]), anyString(sub["subject_id"]), anyString(sub["id"]))
+				name := firstNonEmpty(anyString(sub["subjectName"]), anyString(sub["name"]), anyString(sub["courseName"]), anyString(sub["title"]), product)
+				if sid != "" {
+					if product != "" && name != "" && !strings.Contains(product, name) {
+						name = product + "-" + name
+					}
+					key := strings.Join([]string{mid, sid, ord, orderID}, "\x00")
+					if seen[key] {
+						continue
+					}
+					seen[key] = true
+					price := extractPrice(o)
+					if price == 0 {
+						price = defaultHiddenPrice
+					}
+					raw := map[string]any{
+						"raw_order":    o,
+						"raw_subject":  sub,
+						"merchantName": merchantName,
+					}
+					out = append(out, courseSel{
+						subjectID:   sid,
+						ordSerialNo: ord,
+						orderID:     orderID,
+						title:       name,
+						packageID:   firstNonEmpty(anyString(sub["packageId"]), anyString(o["packageId"])),
+						merchantID:  firstNonEmpty(anyString(sub["merchantId"]), anyString(sub["merchant_id"]), mid),
+						price:       price,
+						purchased:   true,
+						raw:         raw,
+					})
+				}
+			}
+		}
+	}
+	return out
+}
+
+func mergeCourseSel(primary, listed courseSel) courseSel {
+	primary.subjectID = firstNonEmpty(primary.subjectID, listed.subjectID)
+	primary.ordSerialNo = firstNonEmpty(primary.ordSerialNo, listed.ordSerialNo)
+	primary.orderID = firstNonEmpty(primary.orderID, listed.orderID)
+	primary.title = firstNonEmpty(primary.title, listed.title)
+	primary.packageID = firstNonEmpty(primary.packageID, listed.packageID)
+	primary.merchantID = firstNonEmpty(primary.merchantID, listed.merchantID)
+	if primary.price == 0 {
+		primary.price = listed.price
+	}
+	primary.purchased = primary.purchased || listed.purchased
+	if primary.raw == nil {
+		primary.raw = listed.raw
+	}
+	return primary
+}
+
+func fillSubjectDetail(c *util.Client, sess lexueSession, sel *courseSel) error {
+	body, err := requestLexue(c, sess.auth, subjectDetailPath, map[string]any{"ordSerialNo": sel.ordSerialNo, "subjectId": sel.subjectID, "stuId": sess.stuID})
+	if err != nil {
+		return err
+	}
+	var resp struct {
+		Data map[string]any `json:"data"`
+	}
+	if json.Unmarshal(body, &resp) == nil && resp.Data != nil {
+		sel.packageID = firstNonEmpty(sel.packageID, anyString(resp.Data["packageId"]))
+		sel.merchantID = firstNonEmpty(sel.merchantID, anyString(resp.Data["merchantId"]))
+		sel.title = firstNonEmpty(sel.title, anyString(resp.Data["subjectName"]), anyString(resp.Data["courseName"]), anyString(resp.Data["title"]), anyString(resp.Data["name"]))
+		if sel.price == 0 {
+			sel.price = extractPrice(resp.Data)
+		}
+	}
+	return nil
+}
+
+func getLessons(c *util.Client, sess lexueSession, sel courseSel) ([]resource, error) {
+	body, err := requestLexue(c, sess.auth, lessonListPath, map[string]any{"ordSerialNo": sel.ordSerialNo, "subjectId": sel.subjectID, "stuId": sess.stuID})
+	if err != nil {
+		return nil, err
+	}
+	var resp lessonsResp
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, fmt.Errorf("lexueyun lesson list parse: %w", err)
+	}
+	if len(resp.Data.ResourceList) == 0 {
+		return nil, fmt.Errorf("lexueyun lesson list is empty")
+	}
+	return resp.Data.ResourceList, nil
+}
+
+func resolveLesson(c *util.Client, sess lexueSession, sel courseSel, res resource, les lesson, ri, li int) (*extractor.MediaInfo, error) {
+	roomID := lessonRoomID(les)
+	if roomID == "" {
+		return nil, fmt.Errorf("lexueyun lesson has empty room id")
+	}
+	path := liveProPlayPath
+	if toInt(les.LiveSource) == 1 {
+		path = livePlayPath
+	}
+	body, err := requestLexue(c, sess.auth, path, map[string]any{"teachUnitId": anyString(les.TeachUnitID), "ordSerialNo": sel.ordSerialNo, "liveType": liveType(les), "roomId": roomID, "userId": sess.stuID})
+	if err != nil {
+		return nil, err
+	}
+	var pr playResp
+	if err := json.Unmarshal(body, &pr); err != nil || pr.Data.PlayURL == "" {
+		return nil, fmt.Errorf("lexueyun playUrl parse failed")
+	}
+	mediaURL, stream, err := sunlandsMediaURL(c, pr.Data.PlayURL)
+	if err != nil {
+		mediaURL = pr.Data.PlayURL
+	}
+	title := firstNonEmpty(les.LessonName, les.Name, les.Title, fmt.Sprintf("[%d.%d]--未命名课时", ri, li))
+	extra := map[string]any{"lesson_id": anyString(les.LessonID), "livePlaybackId": anyString(les.LivePlaybackID), "liveLessonId": anyString(les.LiveLessonID), "resourceName": res.ResourceName, "roomId": roomID, "playUrl": pr.Data.PlayURL}
+	if stream.SURL != "" || stream.SHttpsURL != "" {
+		extra["selected_stream"] = stream
+	}
+	return &extractor.MediaInfo{Site: "lexueyun", Title: title, Streams: map[string]extractor.Stream{"default": {Quality: "best", URLs: []string{mediaURL}, Format: pickFormat(mediaURL), Headers: map[string]string{"Referer": pr.Data.PlayURL}}}, Extra: extra}, nil
+}
+
+func requestLexue(c *util.Client, auth, path string, params map[string]any) ([]byte, error) {
+	if params == nil {
+		params = map[string]any{}
+	}
+	params["channelCode"] = channelCode
+	payload, err := json.Marshal(params)
+	if err != nil {
+		return nil, fmt.Errorf("lexueyun marshal request %s: %w", path, err)
+	}
+	apiURL := path
+	if !strings.HasPrefix(apiURL, "http") {
+		apiURL = urlOrigin + path
+	}
+	body, err := c.PostForm(apiURL, map[string]string{"channelCode": channelCode, "data": string(payload)}, lexueHeaders(auth))
+	if err != nil {
+		return nil, fmt.Errorf("lexueyun request %s: %w", path, err)
+	}
+	return []byte(body), nil
+}
+
+func requestMap(c *util.Client, sess lexueSession, path string, params map[string]any) map[string]any {
+	body, err := requestLexue(c, sess.auth, path, params)
+	if err != nil {
+		return nil
+	}
+	var m map[string]any
+	_ = json.Unmarshal(body, &m)
+	if d, ok := m["data"].(map[string]any); ok {
+		return d
+	}
+	return m
+}
+
+func sunlandsMediaURL(c *util.Client, playURL string) (string, sunlandsVideo, error) {
+	liveData := decodeLiveData(playURL)
+	if len(liveData) == 0 {
+		return playURL, sunlandsVideo{}, nil
+	}
+	liveData["terminalType"] = 3
+	payload, err := json.Marshal(liveData)
+	if err != nil {
+		return "", sunlandsVideo{}, err
+	}
+	resp, err := c.Post(sunlandsVideoEntry+"/thirdLogin", bytes.NewReader(payload), map[string]string{"Accept": "application/json, text/plain, */*", "Content-Type": "application/json", "Referer": playURL, "Origin": urlOrigin})
+	if err != nil {
+		return "", sunlandsVideo{}, err
+	}
+	defer resp.Body.Close()
+	b, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", sunlandsVideo{}, err
+	}
+	var sr sunlandsResp
+	if err := json.Unmarshal(b, &sr); err != nil {
+		return "", sunlandsVideo{}, err
+	}
+	if sr.Token == "" {
+		return "", sunlandsVideo{}, fmt.Errorf("sunlands thirdLogin returned empty token")
+	}
+	sort.SliceStable(sr.VideoPlayURLs, func(i, j int) bool {
+		return toFloat(sr.VideoPlayURLs[i].LFileSize) > toFloat(sr.VideoPlayURLs[j].LFileSize)
+	})
+	for _, v := range sr.VideoPlayURLs {
+		u := firstNonEmpty(v.SHttpsURL, v.SURL)
+		if u != "" && strings.Contains(strings.ToLower(u), ".mp4") {
+			return normalizeURL(u), v, nil
+		}
+	}
+	for _, v := range sr.VideoPlayURLs {
+		if u := firstNonEmpty(v.SHttpsURL, v.SURL); u != "" {
+			return normalizeURL(u), v, nil
+		}
+	}
+	return "", sunlandsVideo{}, fmt.Errorf("sunlands thirdLogin has no videoPlayUrls")
+}
+
+// getDatum fetches the standalone courseware/datum file list for a subject.
+// Source: Lexueyun_Course._get_datum  →  datumPath = /happyStudy/proxy/lexuesv/pc/getDatum
+func getDatum(c *util.Client, sess lexueSession, sel courseSel) []map[string]any {
+	body, err := requestLexue(c, sess.auth, datumPath, map[string]any{
+		"ordSerialNo": sel.ordSerialNo,
+		"packageId":   sel.packageID,
+		"subjectId":   sel.subjectID,
+		"stuId":       sess.stuID,
+	})
+	if err != nil {
+		return nil
+	}
+	var resp struct {
+		Data json.RawMessage `json:"data"`
+	}
+	if json.Unmarshal(body, &resp) != nil {
+		return nil
+	}
+	var items []map[string]any
+	if json.Unmarshal(resp.Data, &items) != nil {
+		return nil
+	}
+	out := make([]map[string]any, 0, len(items))
+	for _, item := range items {
+		if item != nil {
+			out = append(out, item)
+		}
+	}
+	return out
+}
+
+// makeLexueFileEntry creates a downloadable file entry from a datum/courseData item.
+// It mirrors the source's _make_file_info and _normalize_file_url logic.
+// ri=resource index, li=lesson index (0 for datum-level files), fi=file index within the set.
+// fileSeen deduplicates by (dataId|bundleId|id|url|name).
+func makeLexueFileEntry(item map[string]any, ri, li, fi int, fileSeen map[string]bool) *extractor.MediaInfo {
+	if item == nil {
+		return nil
+	}
+	// Deduplicate by dataId / bundleId / id / url / name  (mirrors _file_key)
+	dedupKey := fileDedupeKey(item)
+	if dedupKey != "" && fileSeen[dedupKey] {
+		return nil
+	}
+	// Resolve file URL  (mirrors _normalize_file_url)
+	fileURL := normalizeLexueFileURL(item)
+	// Resolve title  (mirrors _make_file_info title pick)
+	title := firstNonEmpty(
+		anyString(item["dataName"]),
+		anyString(item["fileName"]),
+		anyString(item["name"]),
+		anyString(item["title"]),
+	)
+	if fileURL == "" && title == "" {
+		return nil
+	}
+	if fileURL == "" {
+		return nil
+	}
+	// Guess extension from URL path or title
+	ext := guessLexueFileExt(fileURL, title, "dat")
+	// Build display name matching source's _file_name pattern: "(ri.li.fi)--title"
+	var displayName string
+	if li > 0 {
+		displayName = fmt.Sprintf("(%d.%d.%d)--%s", ri, li, fi, firstNonEmpty(title, "资料"))
+	} else {
+		displayName = fmt.Sprintf("(%d)--%s", fi, firstNonEmpty(title, "资料"))
+	}
+	displayName = util.SanitizeFilename(stripLexueExt(displayName, ext))
+
+	if dedupKey != "" {
+		fileSeen[dedupKey] = true
+	}
+	return &extractor.MediaInfo{
+		Site:  "lexueyun",
+		Title: displayName,
+		Streams: map[string]extractor.Stream{
+			"file": {
+				Quality: "file",
+				URLs:    []string{fileURL},
+				Format:  ext,
+				Headers: map[string]string{
+					"Referer": urlReferer,
+					"Origin":  urlOrigin,
+				},
+			},
+		},
+		Extra: map[string]any{
+			"type":      "file",
+			"file_url":  fileURL,
+			"file_name": title,
+		},
+	}
+}
+
+// normalizeLexueFileURL resolves the download URL for a datum/courseData item.
+// Source: _normalize_file_url picks from url/fileUrl/downloadUrl/filePath, optionally
+// prepends prefix, then normalizes protocol-relative and root-relative URLs.
+func normalizeLexueFileURL(item map[string]any) string {
+	raw := firstNonEmpty(
+		anyString(item["url"]),
+		anyString(item["fileUrl"]),
+		anyString(item["downloadUrl"]),
+		anyString(item["filePath"]),
+	)
+	prefix := anyString(item["prefix"])
+	if prefix != "" && raw != "" && !strings.HasPrefix(raw, "http://") && !strings.HasPrefix(raw, "https://") && !strings.HasPrefix(raw, "//") {
+		raw = strings.TrimRight(prefix, "/") + "/" + strings.TrimLeft(raw, "/")
+	}
+	return normalizeURL(raw)
+}
+
+// fileDedupeKey mirrors _file_key: returns a stable key for deduplication.
+func fileDedupeKey(item map[string]any) string {
+	for _, k := range []string{"dataId", "bundleId", "id"} {
+		v := anyString(item[k])
+		if v != "" {
+			return k + ":" + v
+		}
+	}
+	u := normalizeLexueFileURL(item)
+	if u != "" {
+		return "url:" + u
+	}
+	n := firstNonEmpty(anyString(item["dataName"]), anyString(item["fileName"]), anyString(item["name"]))
+	if n != "" {
+		return "name:" + n
+	}
+	return ""
+}
+
+// guessLexueFileExt mirrors _guess_file_ext: tries URL path extension, then title extension.
+func guessLexueFileExt(fileURL, title, fallback string) string {
+	for _, source := range []string{fileURL, title} {
+		if source == "" {
+			continue
+		}
+		cleaned := source
+		if u, err := url.Parse(source); err == nil && u.Path != "" {
+			cleaned = u.Path
+		}
+		ext := strings.TrimPrefix(strings.ToLower(filepath.Ext(path.Base(cleaned))), ".")
+		if ext == "jpeg" {
+			return "jpg"
+		}
+		if ext != "" && len(ext) <= 8 {
+			return ext
+		}
+	}
+	return fallback
+}
+
+// stripLexueExt removes a trailing .ext from a filename if it matches the given format.
+// Source: _strip_file_ext
+func stripLexueExt(filename, fileFmt string) string {
+	fileFmt = strings.TrimPrefix(strings.ToLower(strings.TrimSpace(fileFmt)), ".")
+	if fileFmt == "" {
+		return filename
+	}
+	suffix := "." + fileFmt
+	if strings.HasSuffix(strings.ToLower(filename), suffix) {
+		return filename[:len(filename)-len(suffix)]
+	}
+	return filename
+}

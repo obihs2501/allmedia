@@ -1,0 +1,136 @@
+name: Build
+
+on:
+  push:
+    branches: ['main', 'dev']
+    paths:
+      - 'src/**'
+      - 'src-tauri/**'
+      - 'engines/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build (Windows)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup PNPM
+        uses: pnpm/action-setup@v3
+      - name: Setup NodeJS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: engines/mediago/go.mod
+          cache-dependency-path: engines/mediago/go.sum
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Cache Rust Builds
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            src-tauri/target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('engines/hellocrab/**/*.csproj') }}
+      - name: Install dependencies
+        run: pnpm i
+
+      - name: Test & build mediago sidecar
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force -Path src-tauri/binaries | Out-Null
+          Push-Location engines/mediago
+          go vet ./...
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          go test ./...
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          go build -ldflags "-s -w" -o ../../src-tauri/binaries/mediago-x86_64-pc-windows-msvc.exe ./cmd/mediago
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Pop-Location
+
+      - name: Publish HelloCrab headless engine
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          dotnet publish engines/hellocrab/src/HelloCrab.Desktop/HelloCrab.Desktop.csproj `
+            -c Release -r win-x64 --self-contained true `
+            -p:UseAppHost=true -p:PublishSingleFile=false `
+            -o src-tauri/resources/hellocrab
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Bundle FFmpeg (shared by mediago & HelloCrab)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $url = 'https://github.com/GyanD/codexffmpeg/releases/download/7.1/ffmpeg-7.1-essentials_build.zip'
+          Invoke-WebRequest -Uri $url -OutFile ffmpeg.zip
+          Expand-Archive -Path ffmpeg.zip -DestinationPath ffmpeg_tmp -Force
+          New-Item -ItemType Directory -Force -Path src-tauri/resources/hellocrab/ffmpeg | Out-Null
+          Copy-Item (Get-ChildItem -Path ffmpeg_tmp -Recurse -Filter ffmpeg.exe  | Select-Object -First 1).FullName src-tauri/resources/hellocrab/ffmpeg/
+          Copy-Item (Get-ChildItem -Path ffmpeg_tmp -Recurse -Filter ffprobe.exe | Select-Object -First 1).FullName src-tauri/resources/hellocrab/ffmpeg/
+          Remove-Item ffmpeg.zip, ffmpeg_tmp -Recurse -Force
+
+      - name: Prepare aria2c sidecar
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force -Path src-tauri/binaries | Out-Null
+          $url = 'https://github.com/aria2/aria2/releases/download/release-1.37.0/aria2-1.37.0-win-64bit-build1.zip'
+          Invoke-WebRequest -Uri $url -OutFile aria2.zip
+          Expand-Archive -Path aria2.zip -DestinationPath aria2_tmp -Force
+          $exe = Get-ChildItem -Path aria2_tmp -Recurse -Filter aria2c.exe | Select-Object -First 1
+          Copy-Item $exe.FullName 'src-tauri/binaries/aria2c-x86_64-pc-windows-msvc.exe'
+
+      - name: Type check
+        run: pnpm run typeCheck
+      - name: Clean stale bundles
+        shell: pwsh
+        run: |
+          if (Test-Path src-tauri/target/release/bundle) {
+            Remove-Item -Recurse -Force src-tauri/target/release/bundle
+          }
+      - name: Build
+        run: pnpm tauri build
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: allmedia-installer
+          path: src-tauri/target/release/bundle/nsis/*
+      - name: Release
+        if: github.ref == 'refs/heads/main'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          TAG="v${VERSION}-build.${GITHUB_RUN_NUMBER}"
+          gh release create "$TAG" ./src-tauri/target/release/bundle/nsis/* \
+            --title "$TAG" \
+            --notes "AllMedia：三引擎全能媒体下载器。X/Twitter 批量下载（aria2）+ 92 站点全网下载（mediago）+ 11 平台社交采集（HelloCrab 无头引擎，Playwright 浏览器捕获）。安装包内置 mediago、aria2c、HelloCrab 与 FFmpeg；Chromium 首次使用时在「社交采集」页安装。" \
+            --latest

@@ -1,0 +1,13 @@
+{
+  "data": {
+    "courseName": "Enetedu Sample",
+    "courseId": "course-1",
+    "children": [
+      {
+        "name": "Lesson 1",
+        "realId": "node-1",
+        "sourceAddress": "https://cdn.example/enetedu.mp4"
+      }
+    ]
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "code": 20000,
+  "data": {
+    "course": [
+      {
+        "my_delivery_id": 1001,
+        "uuid": "uuid-1001",
+        "title": "考研VIP示例课程",
+        "product_id": 2001
+      }
+    ]
+  }
+}

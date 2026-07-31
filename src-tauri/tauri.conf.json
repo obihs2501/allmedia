@@ -1,0 +1,104 @@
+{
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "beforeBuildCommand": "pnpm build",
+    "devPath": "http://localhost:1420",
+    "distDir": "../dist"
+  },
+  "package": {
+    "productName": "AllMedia",
+    "version": "../package.json"
+  },
+  "tauri": {
+    "allowlist": {
+      "all": false,
+      "app": {
+        "all": true
+      },
+      "clipboard": {
+        "all": true
+      },
+      "dialog": {
+        "all": true
+      },
+      "notification": {
+        "all": true
+      },
+      "os": {
+        "all": true
+      },
+      "path": {
+        "all": true
+      },
+      "shell": {
+        "all": true,
+        "open": ".*",
+        "scope": [
+          {
+            "name": "explorer",
+            "cmd": "explorer",
+            "args": true
+          },
+          {
+            "name": "binaries/aria2c",
+            "sidecar": true,
+            "args": true
+          },
+          {
+            "name": "binaries/mediago",
+            "sidecar": true,
+            "args": true
+          }
+        ]
+      },
+      "window": {
+        "all": true
+      },
+      "fs": {
+        "all": true,
+        "scope": ["**"]
+      },
+      "protocol": {
+        "asset": true,
+        "assetScope": ["**"]
+      }
+    },
+    "bundle": {
+      "active": true,
+      "targets": [
+        "nsis"
+      ],
+      "identifier": "com.obihs2501.allmedia",
+      "icon": [
+        "icons/32x32.png",
+        "icons/128x128.png",
+        "icons/128x128@2x.png",
+        "icons/icon.icns",
+        "icons/icon.ico"
+      ],
+      "externalBin": [
+        "binaries/aria2c",
+        "binaries/mediago"
+      ],
+      "resources": [
+        "resources/hellocrab"
+      ]
+    },
+    "security": {
+      "csp": null
+    },
+    "windows": [
+      {
+        "fullscreen": false,
+        "resizable": true,
+        "title": "AllMedia",
+        "width": 1100,
+        "height": 760,
+        "minWidth": 800,
+        "minHeight": 600,
+        "decorations": true,
+        "additionalBrowserArgs": "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection,IntensiveWakeUpThrottling,CalculateNativeWinOcclusion --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-renderer-backgrounding"
+      }
+    ]
+  }
+}

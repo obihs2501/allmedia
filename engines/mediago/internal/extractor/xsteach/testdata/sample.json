@@ -1,0 +1,46 @@
+{
+  "code": 1,
+  "body": {
+    "courses": [
+      {
+        "courseId": "1001",
+        "name": "Test Course",
+        "classScheduleId": "2001",
+        "lectureType": "video"
+      }
+    ],
+    "schedules": [
+      {
+        "id": "2001",
+        "scheduleSeq": 1,
+        "name": "Lesson 1",
+        "lectureType": "video",
+        "teachCoachId": "3001",
+        "teachCoachVideos": [
+          {
+            "id": "3002",
+            "name": "Coach 1"
+          }
+        ]
+      }
+    ],
+    "records": [
+      {
+        "id": "1001",
+        "name": "Test Course",
+        "classScheduleId": "2001",
+        "lectureType": "video"
+      }
+    ],
+    "url": "https://media.example.com/xsteach/lesson-1.mp4",
+    "periods": [
+      {
+        "id": "3001",
+        "name": "Lesson 1",
+        "lectureType": "video",
+        "videoUrl": "https://media.example.com/xsteach/lesson-1.mp4",
+        "isHasVideo": true
+      }
+    ]
+  }
+}

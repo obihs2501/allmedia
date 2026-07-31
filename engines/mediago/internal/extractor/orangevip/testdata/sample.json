@@ -1,0 +1,56 @@
+{
+  "__default": {
+    "code": 0,
+    "data": {},
+    "courseList": [],
+    "courseChapterList": [],
+    "files": []
+  },
+  "POST /otm/web/course/list": {
+    "courseList": [
+      {
+        "guid": "1001",
+        "courseName": "Orangevip Mock Course",
+        "isExpire": false,
+        "totalCount": 1
+      }
+    ]
+  },
+  "POST /otm/web/course/query/coursePeriod": {
+    "courseChapterList": [
+      {
+        "chapterName": "Chapter 1",
+        "coursePeriodList": [
+          {
+            "guid": "PER1",
+            "coursePeriodTitle": "Orangevip Mock Lesson",
+            "roomId": "ROOM1"
+          }
+        ]
+      }
+    ]
+  },
+  "POST /otm/web/course/v2/reviewPlayInfo": {
+    "data": {
+      "token": "TOKEN1"
+    }
+  },
+  "GET /web/playback/getPlayInfo": "callback({\"code\":200,\"data\":{\"playback_url\":\"https://media.example.com/orangevip/lesson.m3u8\"}});",
+  "GET /Api/Index/getUserInfo": {
+    "errno": 0,
+    "data": {
+      "uid": "12345",
+      "nickname": "Mock User"
+    }
+  },
+  "POST /otm/web/student/myCourseModelFile": {
+    "files": [
+      {
+        "guid": "FILE1",
+        "fileName": "Orangevip Mock Handout.pdf",
+        "netUrl": "https://media.example.com/orangevip/handout.pdf",
+        "isFolder": "0"
+      }
+    ]
+  }
+}

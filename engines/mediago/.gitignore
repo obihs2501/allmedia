@@ -1,0 +1,31 @@
+# binaries
+/mediago
+/mediago.exe
+*.exe
+dist/
+build/
+
+# Go
+vendor/
+
+# Python
+.venv/
+__pycache__/
+
+# Codex
+.codex/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# temp
+*.tmp
+*.log
+*.mp4
+cctalk_cookies.txt

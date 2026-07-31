@@ -1,0 +1,7 @@
+{
+  "title": "Test Course",
+  "data": {
+    "url": "https://media.example.com/youzan/lesson-1.mp4"
+  },
+  "html": "<video src=\"https://media.example.com/youzan/lesson-1.mp4\"></video>"
+}

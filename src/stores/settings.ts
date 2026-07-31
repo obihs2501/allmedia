@@ -1,0 +1,82 @@
+import { path } from '@tauri-apps/api';
+import * as R from 'ramda';
+import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
+import {
+  CURRENT_SETTINGS_VERSION,
+  DEFAULT_SETTINGS,
+} from '../constants/settings';
+import { Settings } from '../interfaces/Settings';
+import { createTauriFileStorage } from './persist/tauri-file-storage';
+
+export interface SettingsStore extends Settings {
+  update: (settings: Settings) => void;
+  updateOne: <T>(name: string, key: string, value: T) => Promise<void>;
+}
+
+export const useSettingsStore = create(
+  persist<SettingsStore>(
+    (set, get) => ({
+      ...DEFAULT_SETTINGS,
+      update: (settings) => {
+        set(settings);
+      },
+      updateOne: async (name, key, value) => {
+        const store = get();
+        const newSettings = R.assocPath([name, key], value)(store) as Settings;
+        store.update(newSettings);
+        log.info('UpdateSettings', `${name}.${key}`, value);
+      },
+    }),
+    {
+      name: 'settings',
+      version: CURRENT_SETTINGS_VERSION,
+      storage: createTauriFileStorage(),
+      onRehydrateStorage: () => {
+        return async (state, error) => {
+          if (error) return;
+
+          // 如果没有默认保存路径，设置为系统 Downloads 文件夹所在地
+          if (!state?.download.saveDirBase) {
+            const dir = await path.downloadDir();
+            useSettingsStore.setState({
+              download: R.mergeDeepRight(state!.download, {
+                saveDirBase: dir,
+              }),
+            });
+          }
+        };
+      },
+      migrate(state: any, version) {
+        if (version === 1) {
+          delete state.download.savePath;
+        }
+
+        // v3 新增账号轮换配置
+        if (version <= 2 && !state.accountRotation) {
+          state.accountRotation = DEFAULT_SETTINGS.accountRotation;
+        }
+
+        // v4 新增日志级别与日志保留天数
+        if (version <= 3) {
+          state.app = {
+            ...DEFAULT_SETTINGS.app,
+            ...state.app,
+          };
+        }
+
+        // v5 新增全网下载（mediago）与社交采集（hellocrab）配置段
+        if (version <= 4) {
+          if (!state.mediago) {
+            state.mediago = DEFAULT_SETTINGS.mediago;
+          }
+          if (!state.hellocrab) {
+            state.hellocrab = DEFAULT_SETTINGS.hellocrab;
+          }
+        }
+
+        return state;
+      },
+    },
+  ),
+);
