@@ -1,4 +1,0 @@
-{
-  "result": "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=800000\nhttps://video.imooc.com/free/demo.m3u8",
-  "mpath": "https://video.imooc.com/free/demo.m3u8"
-}
