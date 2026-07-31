@@ -1,17 +1,29 @@
 package download
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
 
+// ffmpegStubSpec describes the behavior of a fake ffmpeg executable so the
+// same tests can run on both Unix (.sh) and Windows (.bat).
+type ffmpegStubSpec struct {
+	// writeLastArg, when non-empty, writes this text into the file named by
+	// the last command-line argument (mimicking ffmpeg writing its output).
+	writeLastArg string
+	// stderrText, when non-empty, is echoed to stderr.
+	stderrText string
+	exitCode   int
+}
+
 func TestRunFFmpegKeepsSuccessSilent(t *testing.T) {
-	script := writeFFmpegStub(t, `echo "quiet stderr" >&2
-exit 0`)
+	script := writeFFmpegStub(t, ffmpegStubSpec{stderrText: "quiet stderr", exitCode: 0})
 	stderr := captureStderr(t, func() {
 		if err := runFFmpeg(exec.Command(script)); err != nil {
 			t.Fatalf("runFFmpeg returned error: %v", err)
@@ -23,8 +35,7 @@ exit 0`)
 }
 
 func TestRunFFmpegPrintsStderrOnFailure(t *testing.T) {
-	script := writeFFmpegStub(t, `echo "ffmpeg build info" >&2
-exit 1`)
+	script := writeFFmpegStub(t, ffmpegStubSpec{stderrText: "ffmpeg build info", exitCode: 1})
 	stderr := captureStderr(t, func() {
 		if err := runFFmpeg(exec.Command(script)); err == nil {
 			t.Fatal("runFFmpeg returned nil error")
@@ -42,9 +53,7 @@ func TestMuxDASHWritesPartThenRenamesOnSuccess(t *testing.T) {
 	if err := os.WriteFile(videoPath, []byte("video"), 0o644); err != nil {
 		t.Fatalf("write video: %v", err)
 	}
-	script := writeFFmpegStub(t, `for last do :; done
-echo merged > "$last"
-exit 0`)
+	script := writeFFmpegStub(t, ffmpegStubSpec{writeLastArg: "merged", exitCode: 0})
 	engine := New(Opts{OutputDir: dir, Overwrite: true})
 	engine.ffmpeg = script
 
@@ -66,10 +75,11 @@ func TestMuxDASHCleansPartOnFailure(t *testing.T) {
 	if err := os.WriteFile(videoPath, []byte("video"), 0o644); err != nil {
 		t.Fatalf("write video: %v", err)
 	}
-	script := writeFFmpegStub(t, `for last do :; done
-echo partial > "$last"
-echo ffmpeg failed >&2
-exit 1`)
+	script := writeFFmpegStub(t, ffmpegStubSpec{
+		writeLastArg: "partial",
+		stderrText:   "ffmpeg failed",
+		exitCode:     1,
+	})
 	engine := New(Opts{OutputDir: dir, Overwrite: true})
 	engine.ffmpeg = script
 
@@ -86,12 +96,41 @@ exit 1`)
 	}
 }
 
-func writeFFmpegStub(t *testing.T, body string) string {
+func writeFFmpegStub(t *testing.T, spec ffmpegStubSpec) string {
 	t.Helper()
 	dir := t.TempDir()
+
+	if runtime.GOOS == "windows" {
+		path := filepath.Join(dir, "ffmpeg-stub.bat")
+		var b strings.Builder
+		b.WriteString("@echo off\r\n")
+		if spec.writeLastArg != "" {
+			b.WriteString("set \"last=\"\r\n")
+			b.WriteString("for %%a in (%*) do set \"last=%%~a\"\r\n")
+			b.WriteString("echo " + spec.writeLastArg + "> \"%last%\"\r\n")
+		}
+		if spec.stderrText != "" {
+			b.WriteString("echo " + spec.stderrText + " 1>&2\r\n")
+		}
+		b.WriteString(fmt.Sprintf("exit /b %d\r\n", spec.exitCode))
+		if err := os.WriteFile(path, []byte(b.String()), 0o755); err != nil {
+			t.Fatalf("write stub: %v", err)
+		}
+		return path
+	}
+
 	path := filepath.Join(dir, "ffmpeg-stub.sh")
-	content := "#!/bin/sh\nset -e\n" + body + "\n"
-	if err := os.WriteFile(path, []byte(content), 0o755); err != nil {
+	var b strings.Builder
+	b.WriteString("#!/bin/sh\n")
+	if spec.writeLastArg != "" {
+		b.WriteString("for last do :; done\n")
+		b.WriteString("echo " + spec.writeLastArg + " > \"$last\"\n")
+	}
+	if spec.stderrText != "" {
+		b.WriteString("echo \"" + spec.stderrText + "\" >&2\n")
+	}
+	b.WriteString(fmt.Sprintf("exit %d\n", spec.exitCode))
+	if err := os.WriteFile(path, []byte(b.String()), 0o755); err != nil {
 		t.Fatalf("write stub: %v", err)
 	}
 	return path
