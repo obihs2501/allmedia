@@ -1,307 +1,212 @@
-# MediaGo with Desktop GUI
+# 统一媒体下载器 (allmedia)
 
-> 🎯 MediaGo 的桌面 GUI 版本 - 双击即用，支持 92 个中文平台
+<p align="center">
+  <strong>一个功能强大的多平台媒体下载器，整合100+平台支持，完全可视化操作</strong>
+</p>
 
-[![License](https://img.shields.io/badge/license-Unlicense-green.svg)](LICENSE)
-[![Go Version](https://img.shields.io/badge/Go-1.22+-blue.svg)](https://golang.org)
-[![Wails](https://img.shields.io/badge/GUI-Wails_v2-red.svg)](https://wails.io)
-
-**双模式运行** - 双击启动桌面 GUI，命令行使用 CLI 模式
-
-![Desktop GUI](https://img.shields.io/badge/Desktop_GUI-✅-success)
-![CLI Mode](https://img.shields.io/badge/CLI_Mode-✅-success)
 
 ---
 
-## ✨ 特性
+## ✨ 核心特色
 
-### 🎯 双模式操作
+### 🌐 多平台支持
 
-```bash
-# 双击 mediago.exe → 打开桌面 GUI 窗口
-mediago.exe
 
-# 命令行使用 → CLI 模式（保留所有原功能）
-mediago.exe https://www.bilibili.com/video/BV1xxx
-```
 
-### 🖥️ 桌面 GUI 模式
+#### 社交媒体平台
 
-- ✅ **真正的桌面应用** - 基于 Wails v2 + WebView2，原生系统窗口
-- ✅ **窗口任意缩放** - 界面自适应，小窗口下自动滚动
-- ✅ **简单易用** - 可视化表单输入，原生目录选择器
-- ✅ **实时反馈** - 下载进度实时显示
-- ✅ **完整功能** - 支持格式选择、Cookies、代理、整列表下载
+- **Twitter/X**: 博主主页批量下载、单条推文解析、账号池轮换
+- **抖音**: 作者主页采集、滚动加载、视频/图集下载
+- **快手**: 主站与Live站支持
+- **小红书**: 首屏、分页与详情解析
+- **微博**: 普通视频和图文混排，4K/2K/1080p高清
+- **Instagram**: GraphQL接口、Reels、轮播图
+- **Pinterest**: Pin、画板、HLS视频
+- **Bilibili**: DASH最高画质、音视频合并
+- **TikTok**: item_list接口、最高分辨率
 
-### 💻 CLI 模式（保留）
+#### 中国在线教育平台（92个站点，103个提取器）
 
-- ✅ **所有原功能** - 完全兼容原 MediaGo
-- ✅ **批量下载** - 多 URL 支持
-- ✅ **脚本自动化** - 适合批处理
-- ✅ **远程服务器** - SSH 环境可用
+- **综合平台**: 学堂在线、智慧树、中国大学MOOC、网易云课堂
+- **职业考试**: 粉笔、华图、高顿、建设工程教育网、医学教育网
+- **企业培训**: 钉钉、飞书、腾讯会议、ClassIn
+- **知识付费**: 小鹅通、有赞、荔枝微课、千聊
+- **更多**: ICVE、超星、fenbi、xueersi等
+
+### 📂 智能文件管理
+
+- **去重机制**: 文件名匹配、MD5校验
+- **增量下载**: 记录上次位置，一键续传
+- **自动跳过**: 检测已存在文件自动跳过
+- **自定义命名**: 支持变量模板命名
+
+### 🎯 灵活下载控制
+
+- **可视化界面**: 所有操作通过图形界面完成，无需命令行
+- **批量管理**: 博主分组、批量导入/导出
+- **进度监控**: 实时显示下载进度、速度、状态
+- **任务队列**: 智能队列管理，支持暂停/恢复
+- **格式选择**: 自动选择最高质量或手动指定格式
+- **Cookie管理**: 可视化Cookie配置，支持浏览器导入
+
+### 🖼️ 本地画廊
+
+- 按平台/博主分组浏览
+- 多级子目录浏览
+- 网格/列表视图切换
+- 实时刷新展示
+
+### 🎨 现代化界面
+
+- 深色/浅色主题
+- 响应式布局
+- 实时状态反馈
+- 优雅的交互设计
 
 ---
 
-## 📥 安装
+## 📸 平台覆盖
 
-### 下载预编译版本（推荐）
+### 社交媒体 (9+)
 
-从 [Releases](https://github.com/obihs2501/mediago-webui/releases) 下载 Windows 版本。
+✅ Twitter/X | ✅ 抖音 | ✅ 快手 | ✅ 微博 | ✅ 小红书  
+✅ Instagram | ✅ Pinterest | ✅ Bilibili | ✅ TikTok  
 
-提供两个 exe 文件：
+### 在线教育 (92+)
 
-1. **mediago-gui.exe** - 纯 GUI 模式（推荐）
-   - 双击打开，无控制台窗口
-   - 界面干净
-   - 适合日常使用
+Bilibili系列、Douyin、CCTV、Chaoxing、iCourse163、Xuetang、Zhihuishu、iMOOC、DingTalk、Feishu、Fenbi、Huatu、Gaodun、Jianshe99、Med66等
 
-2. **mediago.exe** - CLI + GUI 双模式
-   - 支持命令行使用
-   - 双击打开会显示控制台
-   - 适合调试和批量操作
+<details>
+<summary><strong>完整平台列表</strong> (点击展开)</summary>
 
-> 注意：目前仅提供 Windows 版本。macOS 和 Linux 用户请使用原 [MediaGo](https://github.com/Sophomoresty/mediago) CLI 版本。
 
-### 必需依赖
+**视频平台**: Bilibili (video/cheese/gongfang/bangumi), Douyin, CCTV
 
-- **ffmpeg** - 用于视频合并和格式转换
-  - Windows: [下载 ffmpeg](https://www.gyan.dev/ffmpeg/builds/)
-  - macOS: `brew install ffmpeg`
-  - Linux: `sudo apt install ffmpeg`
+**在线教育**: Chaoxing, iCourse163 (mooc/app/youdao/textbook), Xuetang, Zhihuishu (course/live/school/smart), iMOOC
+
+**企业培训**: DingTalk, Feishu, Meeting, ClassIn, CCTalk, Baijiayunxiao, Keqq
+
+**职业考试**: Fenbi, Huatu, Gaodun, Jianshe99, Med66, Hqwx, Wangxiao, Wangxiao233, Dongao, Eoffcn, Kaoyanvip, Yikaobang
+
+**K12教育**: Xueersi, Yangcong, Yixiaoerguo, Speiyou, Gaotu, Koolearn
+
+**IT培训**: Cto51, Huke88, Magedu, Itbaizhan, Luffycity, Tmooc, Mashibing
+
+**知识付费**: Xiaoetech, Xiaoeapp, Youzan, Qlchat, Lizhiweike, Renrenjiang, Sanjieke, Duanshu
+
+**其他**: Lexueyun, Smartedu, Icourses, ICVE (ai/mooc/course), Cnmooc, Open163, Unipus等
+
+</details>
 
 ---
 
-## 🎯 使用方法
+## 💡 主要功能
 
-### GUI 模式（推荐）
+### 1. 平台管理
 
-**方式一：纯 GUI（无控制台）**
-```
-双击 mediago-gui.exe
-→ 打开桌面窗口
-→ 填写表单
-→ 开始下载
-```
+- 可视化选择目标平台
+- 查看平台支持的功能
+- 配置平台特定选项
 
-**方式二：带控制台（可看日志）**
-```
-双击 mediago.exe
-→ 打开 GUI 窗口 + 控制台
-→ 可以看到详细的下载日志
-→ 适合调试
-```
+### 2. 账号管理
 
-### CLI 模式（命令行）
+- Cookie可视化配置
+- 浏览器Cookie导入
+- 多账号轮换
+- 账号状态检测
 
-仅 `mediago.exe` 支持：
+### 3. 下载任务
 
-```bash
-# 下载视频
-mediago.exe https://www.bilibili.com/video/BV1GJ411x7h7
+- 添加博主/频道/课程
+- 批量导入列表
+- 分组管理
+- 增量更新
 
-# 使用 Cookies（付费内容）
-mediago.exe --cookies cookies.txt URL
+### 4. 进度监控
 
-# 选择画质
-mediago.exe -f 1080p URL
+- 实时进度显示
+- 速度/时间估算
+- 错误日志查看
+- 任务统计
 
-# 列出可用格式
-mediago.exe -F URL
+### 5. 文件管理
 
-# 下载整个课程/播放列表
-mediago.exe --yes-playlist URL
+- 本地画廊浏览
+- 文件去重检测
+- 存储位置管理
+- 命名模板配置
 
-# 使用代理
-mediago.exe --proxy socks5://127.0.0.1:1080 URL
-```
+---
 
-完整命令参数见原 [MediaGo 文档](https://github.com/Sophomoresty/mediago)
+## 🔧 高级功能
+
+### Cookie配置
+
+- 支持Netscape格式
+- 浏览器Cookie提取（Chrome/Edge/Firefox）
+- 可视化编辑器
+- 账号池轮换策略
+
+### 代理设置
+
+- HTTP/HTTPS/SOCKS5代理
+- 系统代理自动检测
+- 每个平台独立配置
+
+### 下载选项
+
+- 并发数控制
+- 重试策略
+- 速度限制
+- 格式优先级
+
+### 格式处理
+
+- 自动选择最高质量
+- HLS/DASH流处理
+- 音视频合并（FFmpeg）
+- 字幕下载
 
 ---
 
 ## 🛠️ 技术栈
 
-- **核心**: Go 1.21+
-- **GUI**: [Fyne v2.5](https://fyne.io) - 跨平台原生 GUI
-- **CLI**: [Cobra](https://github.com/spf13/cobra) - 命令行框架
-- **下载引擎**: 原 MediaGo 引擎（92 个平台支持）
-
-### 为什么选择 Fyne？
-
-| 特性 | Fyne | 
-|------|------|
-| 编译复杂度 | ⭐⭐⭐⭐⭐ |
-| Windows 体积 | 15-20MB |
-| 原生外观 | ✅ |
-| 跨平台 | ✅ (目前仅 Windows) |
-| 纯 Go | ✅ |
-
-> **为什么只有 Windows 版本？**
-> 
-> Fyne 需要 CGO 编译，在 GitHub Actions 上跨平台编译较复杂。目前专注于 Windows 用户体验。
-> 
-> macOS/Linux 用户推荐使用原 [MediaGo CLI](https://github.com/Sophomoresty/mediago)。
+- **前端**: React + TypeScript + Ant Design + TailwindCSS
+- **状态管理**: Zustand
+- **桌面框架**: Tauri
+- **后端语言**: Rust
+- **下载引擎**: reqwest + aria2c
+- **媒体处理**: FFmpeg
 
 ---
 
-## 🚀 从源码构建
+## 🎯 设计理念
 
-### 前置要求
-
-- Go 1.21+
-- Git
-
-### 构建步骤
-
-```bash
-# 1. 克隆仓库
-git clone https://github.com/obihs2501/mediago-webui.git
-cd mediago-webui
-
-# 2. 下载依赖
-go mod download
-
-# 3. 编译
-go build -o mediago ./cmd/mediago
-
-# 4. 运行
-./mediago          # GUI 模式
-./mediago [URL]    # CLI 模式
-```
-
-### 编译选项
-
-```bash
-# 最小化体积（去除调试信息）
-go build -ldflags="-s -w" -o mediago ./cmd/mediago
-
-# Windows GUI 模式（无控制台窗口）
-go build -ldflags="-s -w -H windowsgui" -o mediago.exe ./cmd/mediago
-```
+1. **统一界面**: 所有平台使用一致的操作界面
+2. **零命令行**: 完全图形化操作，无需记忆命令
+3. **智能化**: 自动检测、自动去重、自动重试
+4. **可扩展**: 插件化架构，轻松添加新平台
+5. **跨平台**: Windows/macOS/Linux统一体验
 
 ---
 
-## 📦 项目结构
+## ⚠️ 免责声明
 
-```
-mediago-webui/
-├── cmd/
-│   └── mediago/
-│       ├── main.go          # 主程序（GUI + CLI）
-│       ├── extractors.go    # 提取器列表
-│       └── output.go        # 输出格式化
-├── internal/
-│   ├── extractor/           # 92 个平台提取器
-│   ├── download/            # 下载引擎
-│   ├── cookie/              # Cookie 处理
-│   └── util/                # 工具函数
-├── go.mod                   # Go 依赖
-└── README.md                # 本文件
-```
+本项目仅供学习、研究与技术交流使用。使用者应遵守目标平台的服务条款和相关法律法规。下载的内容仅限个人学习使用，不得用于商业用途。使用本工具产生的任何后果由使用者自行承担。
 
 ---
 
-## 🌐 支持的平台
+## 📄 开源协议
 
-支持 **92 个中文视频/课程平台**，包括：
-
-- **视频平台**: Bilibili, Douyin, 抖音
-- **在线课程**: iCourse163, Xuetang, Chaoxing, Zhihuishu
-- **职业培训**: Huatu, Gaodun, Fenbi, Med66
-- **企业培训**: DingTalk, Feishu, ClassIn
-- **更多...** 完整列表见 `mediago --list-extractors`
-
----
-
-## 🆚 对比
-
-### vs. 原 MediaGo
-
-| 特性 | 原 MediaGo | 本项目 |
-|------|-----------|--------|
-| CLI 模式 | ✅ | ✅ |
-| GUI 模式 | ❌ | ✅ (Fyne 桌面窗口) |
-| 使用难度 | 需要命令行知识 | 双击即用 |
-| 适合人群 | 开发者 | 所有用户 |
-| 功能 | 完整 | 完整 |
-
-### vs. 其他 WebUI 方案
-
-| 特性 | 本项目 | 浏览器 WebUI |
-|------|--------|-------------|
-| 启动方式 | 双击 | 双击 + 等待浏览器 |
-| 窗口类型 | 原生桌面窗口 | 浏览器标签页 |
-| 外观 | 系统原生 | Web 样式 |
-| 资源占用 | 低 | 中（浏览器占用） |
-
----
-
-## 💡 常见问题
-
-### Q: 为什么双击没反应？
-
-**A**: 
-1. 检查是否已安装 ffmpeg
-2. 在命令行运行查看错误信息：`./mediago.exe`
-
-### Q: 提示找不到 ffmpeg？
-
-**A**: 
-- Windows: 下载 ffmpeg.exe 并放在与 mediago.exe 同目录
-- macOS/Linux: 安装 ffmpeg 到系统 PATH
-
-### Q: GUI 和 CLI 有什么区别？
-
-**A**: 
-- GUI: 双击启动，图形界面，适合日常使用
-- CLI: 命令行，功能更强大，适合批量处理和自动化
-
-### Q: 付费内容如何下载？
-
-**A**: 需要提供 Cookies 文件：
-1. 浏览器登录并购买课程
-2. 使用插件导出 cookies.txt
-3. GUI 模式：在表单中填写 cookies 文件路径
-4. CLI 模式：`mediago --cookies cookies.txt URL`
-
-### Q: 支持哪些平台？
-
-**A**: 支持 92 个中文平台，运行 `mediago --list-extractors` 查看完整列表
-
----
-
-## 🤝 贡献
-
-欢迎贡献！
-
-- 🐛 报告 Bug
-- 💡 提出新功能
-- 📝 改进文档
-- 🔧 提交代码
-
----
-
-## 📄 许可证
-
-与原 MediaGo 项目相同，使用 [The Unlicense](LICENSE) 发布到公有领域。
+GPL-3.0-only
 
 ---
 
 ## 🙏 致谢
 
-- [MediaGo](https://github.com/Sophomoresty/mediago) - 核心下载引擎
-- [Fyne](https://fyne.io) - 跨平台 GUI 框架
-- [FFmpeg](https://ffmpeg.org/) - 视频处理工具
+本项目整合了以下优秀开源项目的功能：
 
----
+- [x-spider](https://github.com/obihs2501/x-spider-mod-2026) - Twitter下载器
+- [HelloCrab](https://github.com/hupo376787/HelloCrab) - 多平台采集器
 
-## 📞 支持
-
-- **问题反馈**: [GitHub Issues](https://github.com/obihs2501/mediago-webui/issues)
-- **原项目**: [MediaGo](https://github.com/Sophomoresty/mediago)
-
----
-
-**立即下载，开始使用！** 🚀
-
-[📥 下载最新版本](https://github.com/obihs2501/mediago-webui/releases)
+感谢所有贡献者的付出！
